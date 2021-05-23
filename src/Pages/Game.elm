@@ -246,7 +246,7 @@ update msg model =
                 |> updatePhase ChoosingHand
                 |> updateModal Modal.hidden
                 |> updateModalType NoModal
-                |> noCmd
+                |> (\m -> ( m, Random.generate ShuffleCard (Random.List.shuffle model.deck) ))
 
         ClickInspiration card ->
             model
@@ -262,7 +262,11 @@ update msg model =
             ( { model | timeStart = newTime, timeNow = newTime }, Cmd.none )
 
         Tick newTime ->
-            ( { model | timeNow = newTime }, Cmd.none )
+            if model.phase == Win then
+                ( model, Cmd.none )
+
+            else
+                ( { model | timeNow = newTime }, Cmd.none )
 
         FocusMenu modalType ->
             ( { model | focusedMenu = modalType }, Cmd.none )
@@ -1070,29 +1074,30 @@ cleanUp modelOriginal =
         newModel =
             thousandOrZero modelOriginal
 
-        -- デッキが切れていて、Round3なら敗北、他なら捨て札をシャッフルして手札を補充
+        -- 手札とデッキが切れていて、Round3なら敗北、他なら捨て札をシャッフルして手札を補充
         refillDeck : Model -> ( Model, Cmd Msg )
         refillDeck model =
-            if model.deck /= [] then
-                ( { model | phase = ChoosingHand }, Cmd.none )
+            if List.all (\s -> s.card == NoCard) model.hand && model.deck == [] then
+                if model.round == 3 then
+                    model
+                        |> updateInfo "敵が1000ひつじに達しました。あなたの負けです。"
+                        |> updateRound 4
+                        |> updatePhase Lose
+                        |> noCmd
 
-            else if model.round == 3 then
-                model
-                    |> updateInfo "敵が1000ひつじに達しました。あなたの負けです。"
-                    |> updateRound 4
-                    |> updatePhase Lose
-                    |> noCmd
+                else
+                    ( model
+                        |> updateInfo "山札がなくなりました。次のラウンドに移ります。"
+                        |> updateRound (model.round + 1)
+                        |> updatePhase ChoosingHand
+                        |> updateDiscarded []
+                    , Random.generate
+                        ShuffleCard
+                        (Random.List.shuffle model.discarded)
+                    )
 
             else
-                ( model
-                    |> updateInfo "山札がなくなりました。次のラウンドに移ります。"
-                    |> updateRound (model.round + 1)
-                    |> updatePhase ChoosingHand
-                    |> updateDiscarded []
-                , Random.generate
-                    ShuffleCard
-                    (Random.List.shuffle model.discarded)
-                )
+                ( { model | phase = ChoosingHand }, Cmd.none )
     in
     if newModel.phase == Win || newModel.phase == Lose then
         ( newModel, Cmd.none )
@@ -1335,7 +1340,7 @@ calculateElapsedTime model =
         second =
             String.fromInt (Time.toSecond Time.utc diffPosix) ++ "秒"
     in
-        hour ++ minute ++ second
+    hour ++ minute ++ second
 
 
 viewCardDesc : Model -> List (Html Msg)
