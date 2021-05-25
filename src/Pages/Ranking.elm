@@ -15,8 +15,8 @@ import Json.Decode as D
 import Page
 import Request
 import Shared
-import View exposing (View)
 import Time
+import View exposing (View)
 
 
 page : Shared.Model -> Request.With Params -> Page.With Model Msg
@@ -27,6 +27,10 @@ page shared req =
         , view = view
         , subscriptions = subscriptions
         }
+
+
+serverURL =
+    "https://elmshephy.pythonanywhere.com"
 
 
 
@@ -49,7 +53,7 @@ type alias Record =
 init : ( Model, Cmd Msg )
 init =
     ( Loading
-    , Http.get { url = "http://127.0.0.1:8000/", expect = Http.expectJson GotRanking rankingDecoder }
+    , Http.get { url = serverURL, expect = Http.expectJson GotRanking rankingDecoder }
     )
 
 
@@ -173,6 +177,8 @@ viewRankingRow order record =
         , Table.td [] [ text (millisToFancyTime record.time) ]
         , Table.td [] [ text record.date ]
         ]
+
+
 
 -- Utility
 

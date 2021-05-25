@@ -41,6 +41,10 @@ page shared req =
         }
 
 
+serverURL =
+    "https://elmshephy.pythonanywhere.com"
+
+
 
 -- MODEL
 
@@ -320,7 +324,7 @@ update msg model =
             in
             ( { model | registerStatus = Sending }
             , Http.post
-                { url = "http://127.0.0.1:8000/"
+                { url = serverURL
                 , body =
                     Http.stringBody "application/x-www-form-urlencoded"
                         (String.concat
