@@ -45,28 +45,27 @@ htmlView =
                 ]
             , Grid.colBreak []
             , Grid.col [ Col.xs6 ]
-                [ Button.button
-                    [ Button.outlinePrimary ]
-                    [ a [ href (Route.toHref Route.Game) ]
-                        [ text "ゲームを始める" ]
+                [ Button.linkButton
+                    [ Button.outlinePrimary
+                    , Button.attrs [ href (Route.toHref Route.Game)]
                     ]
+                    [ text "ゲームを始める" ]
                 ]
             , Grid.colBreak []
             , Grid.col [ Col.xs6 ]
-                [ Button.button
-                    [ Button.outlinePrimary ]
-                    [ a [ href (Route.toHref Route.Game) ]
-                        [ text "ランキング" ]
+                [ Button.linkButton
+                    [ Button.outlinePrimary
+                    , Button.attrs [ href (Route.toHref Route.Ranking)]
                     ]
+                    [ text "ランキング" ]
                 ]
             , Grid.colBreak []
             , Grid.col [ Col.xs6 ]
-                [ Button.button
-                    [ Button.outlinePrimary ]
-                    [ a
-                        [ href "https://boku-boardgame.net/shephy" ]
-                        [ text "ルール（外部ページ）" ]
+                [ Button.linkButton
+                    [ Button.outlinePrimary
+                    , Button.attrs [ href "https://boku-boardgame.net/shephy"]
                     ]
+                    [ text "ルール（外部ページ）" ]
                 ]
             ]
         ]

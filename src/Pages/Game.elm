@@ -5,6 +5,8 @@ import Bootstrap.ButtonGroup as ButtonGroup
 import Bootstrap.CDN as CDN
 import Bootstrap.Card as Card
 import Bootstrap.Card.Block as Block
+import Bootstrap.Form as Form
+import Bootstrap.Form.Input as Input
 import Bootstrap.Grid as Grid
 import Bootstrap.Grid.Col as Col
 import Bootstrap.Grid.Row as Row
@@ -16,6 +18,8 @@ import Gen.Route as Route exposing (Route)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
+import Http
+import Json.Decode as D
 import List.Extra as List
 import Page
 import Random
@@ -101,7 +105,16 @@ type alias Model =
     , timeNow : Time.Posix
     , modalType : ModalType
     , showDecide : Bool
+    , userName : String
+    , registerStatus : RegisterStatus
     }
+
+
+type RegisterStatus
+    = Editing
+    | Sending
+    | Failed Http.Error
+    | Succeeded String
 
 
 type Page
@@ -143,6 +156,8 @@ initModel =
     , timeNow = Time.millisToPosix 0
     , modalType = NoModal
     , showDecide = False
+    , userName = ""
+    , registerStatus = Editing
     }
 
 
@@ -182,6 +197,9 @@ type Msg
     | FocusMenu ModalType
     | BlurMenu
     | ClickMenu ModalType
+    | InputName String
+    | RegisterTime
+    | GotResponse (Result Http.Error String)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -279,6 +297,52 @@ update msg model =
                 |> updateModalType modalType
                 |> updateModal Modal.shown
                 |> noCmd
+
+        InputName name ->
+            ( { model | userName = name }, Cmd.none )
+
+        RegisterTime ->
+            let
+                sendingText : String
+                sendingText =
+                    String.concat
+                        [ "userName="
+                        , model.userName
+                        , "&finishTime="
+                        , calculateDiffPosix model
+                            |> Time.posixToMillis
+                            |> String.fromInt
+                        ]
+
+                textDecoder : D.Decoder String
+                textDecoder =
+                    D.field "text" D.string
+            in
+            ( { model | registerStatus = Sending }
+            , Http.post
+                { url = "http://127.0.0.1:8000/"
+                , body =
+                    Http.stringBody "application/x-www-form-urlencoded"
+                        (String.concat
+                            [ "userName="
+                            , model.userName
+                            , "&finishTime="
+                            , calculateDiffPosix model
+                                |> Time.posixToMillis
+                                |> String.fromInt
+                            ]
+                        )
+                , expect = Http.expectJson GotResponse textDecoder
+                }
+            )
+
+        GotResponse result ->
+            case result of
+                Ok text ->
+                    ( { model | registerStatus = Succeeded text }, Cmd.none )
+
+                Err errText ->
+                    ( { model | registerStatus = Failed errText }, Cmd.none )
 
 
 updateClickHand : Card -> Int -> Model -> ( Model, Cmd Msg )
@@ -1054,7 +1118,7 @@ cleanUp modelOriginal =
         thousandOrZero : Model -> Model
         thousandOrZero model =
             -- 1000ひつじがあれば勝利
-            if List.member (SheepSlot S1000 Frozen) model.sheep then
+            if List.any (\s -> s.sheep == S1000) model.sheep then
                 model
                     |> updateInfo
                         "1000ひつじを手にしました。あなたの勝ちです。おめでとうございます。"
@@ -1319,17 +1383,8 @@ viewMenuItemWithModal model title body modalType =
 calculateElapsedTime : Model -> String
 calculateElapsedTime model =
     let
-        startMillis =
-            Time.posixToMillis model.timeStart
-
-        nowMillis =
-            Time.posixToMillis model.timeNow
-
-        diffMillis =
-            nowMillis - startMillis
-
         diffPosix =
-            Time.millisToPosix diffMillis
+            calculateDiffPosix model
 
         hour =
             String.fromInt (Time.toHour Time.utc diffPosix) ++ "時間"
@@ -1341,6 +1396,21 @@ calculateElapsedTime model =
             String.fromInt (Time.toSecond Time.utc diffPosix) ++ "秒"
     in
     hour ++ minute ++ second
+
+
+calculateDiffPosix : Model -> Time.Posix
+calculateDiffPosix model =
+    let
+        startMillis =
+            Time.posixToMillis model.timeStart
+
+        nowMillis =
+            Time.posixToMillis model.timeNow
+
+        diffMillis =
+            nowMillis - startMillis
+    in
+    Time.millisToPosix diffMillis
 
 
 viewCardDesc : Model -> List (Html Msg)
@@ -1397,18 +1467,57 @@ viewModalWin : Model -> Html Msg
 viewModalWin model =
     Modal.config CloseModal
         |> Modal.h3 [] [ text "あなたの勝ちです" ]
-        |> Modal.body [] [ p [] [ text model.info.info3 ] ]
+        |> Modal.body []
+            [ p [] [ text ("タイム：" ++ calculateElapsedTime model) ]
+            , case model.registerStatus of
+                Editing ->
+                    Form.formInline []
+                        [ Input.text
+                            [ Input.attrs [ placeholder "お名前" ]
+                            , Input.onInput InputName
+                            ]
+                        , Button.button
+                            [ Button.primary
+                            , Button.attrs [ class "ml-sm-2 my-2" ]
+                            , Button.onClick RegisterTime
+                            ]
+                            [ text "登録" ]
+                        ]
+
+                Sending ->
+                    text "Loading..."
+
+                Failed errorHttp ->
+                    case errorHttp of
+                        Http.BadUrl message ->
+                            text ("BadUrl" ++ message)
+
+                        Http.Timeout ->
+                            text "Timeout"
+
+                        Http.NetworkError ->
+                            text "NetworkError"
+
+                        Http.BadStatus code ->
+                            text ("BadStatus" ++ String.fromInt code)
+
+                        Http.BadBody message ->
+                            text ("BadBody" ++ message)
+
+                Succeeded resText ->
+                    text resText
+            ]
         |> Modal.footer []
             [ Button.button
                 [ Button.outlinePrimary
                 , Button.onClick InitGame
                 ]
                 [ text "もう一度" ]
-            , Button.button
-                [ Button.outlinePrimary ]
-                [ a [ href (Route.toHref Route.Home_) ]
-                    [ text "ホームに戻る" ]
+            , Button.linkButton
+                [ Button.outlinePrimary
+                , Button.attrs [ href (Route.toHref Route.Home_) ]
                 ]
+                [ text "ホームに戻る" ]
             ]
         |> Modal.view model.modalVisibility
 
@@ -1424,11 +1533,11 @@ viewModalLose model =
                 , Button.onClick InitGame
                 ]
                 [ text "もう一度" ]
-            , Button.button
-                [ Button.outlinePrimary ]
-                [ a [ href (Route.toHref Route.Home_) ]
-                    [ text "ホームに戻る" ]
+            , Button.linkButton
+                [ Button.outlinePrimary
+                , Button.attrs [ href (Route.toHref Route.Home_) ]
                 ]
+                [ text "ホームに戻る" ]
             ]
         |> Modal.view model.modalVisibility
 
